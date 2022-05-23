@@ -19,6 +19,8 @@ npm i -g
 
 ## Usage
 
+The last argument for these commands can be a URL from any available streaming service (see below for how to list available services)
+
 **Get a Songwhip URL:**
 
 ```bash
