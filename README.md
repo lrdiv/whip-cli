@@ -1,6 +1,6 @@
 # whip CLI
 
-Gets you a Songwhip URL for a track OR get a specific service URL
+Get a Songwhip URL for a track OR get a specific service URL
 
 ## Installation
 
@@ -24,13 +24,13 @@ The last argument for these commands can be a URL from any available streaming s
 **Get a Songwhip URL:**
 
 ```bash
-whip song https://tidal.com/browse/track/177186841
+whip get https://tidal.com/browse/track/177186841
 ```
 
 **Get a specific service URL:**
 
 ```bash
-whip get spotify https://tidal.com/browse/track/177186841
+whip get -s spotify https://tidal.com/browse/track/177186841
 ```
 
 The Songwhip or service URL will be copied to your clipboard for easy sharing! Wow!
@@ -40,4 +40,3 @@ The Songwhip or service URL will be copied to your clipboard for easy sharing! W
 ```bash
 whip services
 ```
-

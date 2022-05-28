@@ -1,12 +1,12 @@
 {
-  "name": "songwhip-cli",
-  "version": "1.0.0",
-  "description": "",
+  "name": "whip-cli",
+  "version": "2.0.0",
+  "description": "Get shareable URLs across streaming services.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Lawrence Davis",
   "license": "ISC",
   "type": "module",
   "dependencies": {
