@@ -42,14 +42,37 @@ type model struct {
 	platform int
 	url string
 	errMsg error
+	logFile *os.File
 }
 
+type httpCallbackMsg string
+
 func main() {
-	p := tea.NewProgram(initialModel())
+	model := initialModel()
+	logFile, err := openLogFile("./tmp.log")
+	model.logFile = logFile
+	if err != nil {
+		fmt.Print("Ah shit a log error")
+	}
+	
+	p := tea.NewProgram(model)
 	if err := p.Start(); err != nil {
 		fmt.Printf("Oh no! An error! :( %v", err)
 		os.Exit(1)
 	}
+}
+
+func openLogFile(filename string) (*os.File, error) {
+	logFile, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	return logFile, nil
+}
+
+func (m model) logText(text string) {
+	logger := log.New(m.logFile, "[info]", log.LstdFlags|log.Lshortfile|log.Lmicroseconds)
+	logger.Println(text)
 }
 
 func initialModel() model {
@@ -114,6 +137,8 @@ func (m *model) updateSource(msg tea.Msg) (tea.Cmd) {
 }
 
 func (m *model) getUrl() (tea.Cmd) {
+	m.logText("About to make request...")
+
 	var jsonData = []byte(`{
 			"url": {{.m.source}}
 		}`)
@@ -122,10 +147,13 @@ func (m *model) getUrl() (tea.Cmd) {
 	req.Header = http.Header{
 		"Content-Type": {"application/json"},
 	}
+	m.logText("Request prepared...")
 	res, err := client.Do(req)
 	if err != nil {
+		m.logText("We got error :( :(")
 		m.state = hasError
 		log.Fatal(err)
+		os.Exit(1)
 	}
 	defer res.Body.Close()
 
@@ -135,8 +163,7 @@ func (m *model) getUrl() (tea.Cmd) {
 			log.Fatal(err)
 			m.state = hasError
 		}
-		m.url = string(bodyBytes)
-		m.state = done
+		m.Update(httpCallbackMsg(string(bodyBytes)))
 	}
 	
 	return nil
@@ -157,6 +184,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ret = m.updatePlatform(msg)
 	case fetching:
 		m.getUrl()
+		switch msg := msg.(type) {
+		case httpCallbackMsg:
+			m.state = done
+			m.url = string(msg)
+		}
 	}
 
 	return m, ret
