@@ -31,9 +31,8 @@ const (
 
 // Message types to be used in bubbletea commands
 type errorMsg struct{}
-type tickMsg struct{}
-type httpReadyMsg struct{}
-type httpCallbackMsg struct {
+type songwhipReadyMsg struct{}
+type songwhipDoneMsg struct {
 	url string
 }
 type songwhipCrawlMsg struct {
@@ -91,7 +90,6 @@ type model struct {
 	SongwhipData songwhipResponse
 	Spinner spinner.Model
 	State state
-	Sub chan struct{}
 }
 
 var p *tea.Program
@@ -114,7 +112,6 @@ func initialModel() model {
 		PlatformUrl: "",
 		Spinner: makeSpinner(),
 		State: GetOriginalUrl,
-		Sub: make(chan struct{}),
 	}
 }
 
@@ -205,7 +202,7 @@ func makeSongwhipRequest(url string) {
 		if jsonErr != nil {
 			p.Send(errorMsg{})
 		}
-		p.Send(httpCallbackMsg{
+		p.Send(songwhipDoneMsg{
 			url: songwhipData.Url,
 		})
 	}
@@ -261,7 +258,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case ChoosePlatform:
 				m.Platform = platforms[m.PlatformCursor]
-				return m.Update(httpReadyMsg{})
+				return m.Update(songwhipReadyMsg{})
 			}
 		case tea.KeyUp:
 			if m.State == ChoosePlatform && m.PlatformCursor > 0 {
@@ -278,14 +275,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-	case httpReadyMsg:
+	case songwhipReadyMsg:
 		m.State = FetchingSongwhip
 		return m, getSongwhipData(m.OriginalUrl.Value(), m.Spinner)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
-	case httpCallbackMsg:
+	case songwhipDoneMsg:
 		m.State = CrawlingSongwhip
 		return m, crawlSongwhip(msg.url, m.Platform.Slug, m.Spinner.Tick)
 	case songwhipCrawlMsg:
