@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,8 +23,8 @@ type state int64
 const (
 	GetOriginalUrl state = iota
 	ChoosePlatform
-	FetchSongwhip
-	CrawlSongwhip
+	FetchingSongwhip
+	CrawlingSongwhip
 	Done
 	HasError
 )
@@ -82,18 +83,22 @@ var platforms [10]platform = [10]platform{
 }
 
 type model struct {
-	State state
-	OriginalUrl textinput.Model
-	PlatformCursor int
-	Platform platform
-	SongwhipData songwhipResponse
-	PlatformUrl string
 	Log *os.File
+	OriginalUrl textinput.Model
+	Platform platform
+	PlatformCursor int
+	PlatformUrl string
+	SongwhipData songwhipResponse
+	Spinner spinner.Model
+	State state
+	Sub chan struct{}
 }
+
+var p *tea.Program
 
 func main() {
 	model := initialModel()
-	p := tea.NewProgram(model)
+	p = tea.NewProgram(model)
 
 	if err := p.Start(); err != nil {
 		fmt.Printf("Oh no! An error! :( %v", err)
@@ -102,21 +107,34 @@ func main() {
 }
 
 func initialModel() model {
-	originalUrlInput := textinput.New()
-	originalUrlInput.Placeholder = "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"
-	originalUrlInput.Focus()
-
 	return model{
-		State: GetOriginalUrl,
-		OriginalUrl: originalUrlInput,
+		Log: openLogFile(),
+		OriginalUrl: makeUrlTextinput(),
 		PlatformCursor: 0,
 		PlatformUrl: "",
-		Log: openLogFile("./tmp/whip.log"),
+		Spinner: makeSpinner(),
+		State: GetOriginalUrl,
+		Sub: make(chan struct{}),
 	}
 }
 
-func openLogFile(path string) (*os.File)  {
-	os.Truncate("./tmp/whip.log", 0)
+func makeUrlTextinput() textinput.Model {
+	input := textinput.New()
+	input.Placeholder = "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"
+	input.Focus()
+	return input
+}
+
+func makeSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.MiniDot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
+	return s
+}
+
+func openLogFile() (*os.File)  {
+	path := "./tmp/whip.log"
+	os.Truncate(path, 0)
 	logFile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil || logFile == nil {
 		return nil
@@ -157,55 +175,68 @@ func platformSelectionView(platformCursor int) string {
 	return sb.String()
 }
 
-func getSongwhipData(url string) tea.Cmd {
-	return func() tea.Msg {
-		var songwhipData songwhipResponse
-		var jsonData = bytes.NewBuffer([]byte(fmt.Sprintf(`{"url": "%s"}`, url)))
-		res, err := http.Post("https://songwhip.com/", "application/json", jsonData)
-
-		if err != nil {
-			return errorMsg{}
-		}
-
-		defer res.Body.Close()
-
-		if res.StatusCode == http.StatusOK {
-			bodyBytes, err := io.ReadAll(res.Body)
-			if err != nil {
-				return errorMsg{}
-			}
-
-			jsonErr := json.Unmarshal(bodyBytes, &songwhipData)
-			if jsonErr != nil {
-				return errorMsg{}
-			}
-			return httpCallbackMsg{
-				url: songwhipData.Url,
-			}
-		}
-
-		return errorMsg{}
-	}
+func getSongwhipData(url string, spin spinner.Model) tea.Cmd {
+	go makeSongwhipRequest(url)
+	return spin.Tick
 }
 
-func crawlSongwhip(url string, platform string) tea.Cmd {
-	return func() tea.Msg {
-		var platformUrl string
+func makeSongwhipRequest(url string) {
+	var songwhipData songwhipResponse
+	var jsonData = bytes.NewBuffer([]byte(fmt.Sprintf(`{"url": "%s"}`, url)))
+	res, err := http.Post("https://songwhip.com/", "application/json", jsonData)
 
-		if platform == "songwhip" {
-			return songwhipCrawlMsg{ url: url }
+	if p == nil {
+		os.Exit(1)
+	}
+
+	if err != nil {
+		p.Send(errorMsg{})
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusOK {
+		bodyBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			p.Send(errorMsg{})
 		}
 
-		c := colly.NewCollector(colly.AllowedDomains("songwhip.com"))
-		selector := fmt.Sprintf("a[data-testid=\"ServiceButton %s itemLinkButton %sItemLinkButton\"]", platform, platform)
-
-		c.OnHTML(selector, func (e *colly.HTMLElement) {
-			platformUrl = e.Attr("href")
+		jsonErr := json.Unmarshal(bodyBytes, &songwhipData)
+		if jsonErr != nil {
+			p.Send(errorMsg{})
+		}
+		p.Send(httpCallbackMsg{
+			url: songwhipData.Url,
 		})
-
-		c.Visit(url)
-		return songwhipCrawlMsg{ url: platformUrl }
 	}
+
+}
+
+func crawlSongwhip(url string, platform string, tick tea.Cmd) tea.Cmd {
+	go doSongwhipCrawl(url, platform)
+	return tick
+}
+
+func doSongwhipCrawl(url string, platform string) {
+	if p == nil {
+		os.Exit(1)
+	}
+
+	var platformUrl string
+
+	if platform == "songwhip" {
+		p.Send(songwhipCrawlMsg{ url: url })
+	}
+
+	c := colly.NewCollector(colly.AllowedDomains("songwhip.com"))
+	selector := fmt.Sprintf("a[data-testid=\"ServiceButton %s itemLinkButton %sItemLinkButton\"]", platform, platform)
+
+	c.OnHTML(selector, func (e *colly.HTMLElement) {
+		platformUrl = e.Attr("href")
+	})
+
+	c.Visit(url)
+	p.Send(songwhipCrawlMsg{ url: platformUrl })
 }
 
 func (m model) Init() tea.Cmd {
@@ -230,7 +261,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case ChoosePlatform:
 				m.Platform = platforms[m.PlatformCursor]
-				m.State = FetchSongwhip
 				return m.Update(httpReadyMsg{})
 			}
 		case tea.KeyUp:
@@ -249,10 +279,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case httpReadyMsg:
-		return m, getSongwhipData(m.OriginalUrl.Value())
+		m.State = FetchingSongwhip
+		return m, getSongwhipData(m.OriginalUrl.Value(), m.Spinner)
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.Spinner, cmd = m.Spinner.Update(msg)
+		return m, cmd
 	case httpCallbackMsg:
-		m.State = CrawlSongwhip
-		return m, crawlSongwhip(msg.url, m.Platform.Slug)
+		m.State = CrawlingSongwhip
+		return m, crawlSongwhip(msg.url, m.Platform.Slug, m.Spinner.Tick)
 	case songwhipCrawlMsg:
 		clipboard.WriteAll(msg.url)
 		m.PlatformUrl = msg.url
@@ -274,8 +309,10 @@ func (m model) View() string {
 		)
 	case ChoosePlatform:
 		return platformSelectionView(m.PlatformCursor)
-	case FetchSongwhip, CrawlSongwhip:
-		return "Fetching Songwhip Data..."
+	case FetchingSongwhip:
+		return fmt.Sprintf("%s Getting Songwhip Data...", m.Spinner.View())
+	case CrawlingSongwhip:
+		return fmt.Sprintf("%s Getting %s URL...", m.Spinner.View(), m.Platform.Title)
 	case Done:
 		if len(m.PlatformUrl) == 0 {
 			return fmt.Sprintf("Oh no! Could not find a URL for %s :(", m.Platform.Title)
