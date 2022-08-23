@@ -20,6 +20,7 @@ import (
 
 // Enum for managing TUI state
 type state int64
+
 const (
 	GetOriginalUrl state = iota
 	ChoosePlatform
@@ -39,57 +40,56 @@ type songwhipCrawlMsg struct {
 	url string
 }
 
-
 type platform struct {
-	Slug string
-	Title string
+	Slug     string
+	Title    string
 	HelpText string
 }
 
 var platforms [10]platform = [10]platform{
-	 {
-		Slug: "songwhip",
-		Title: "Songwhip",
+	{
+		Slug:     "songwhip",
+		Title:    "Songwhip",
 		HelpText: "Get a Songwhip URL with links to all available platforms.",
 	}, {
-		Slug: "spotify",
+		Slug:  "spotify",
 		Title: "Spotify",
 	}, {
-		Slug: "itunes",
+		Slug:  "itunes",
 		Title: "Apple Music",
 	}, {
-		Slug: "youtube",
+		Slug:  "youtube",
 		Title: "YouTube Music",
 	}, {
-		Slug: "tidal",
+		Slug:  "tidal",
 		Title: "Tidal",
 	}, {
-		Slug: "amazonMusic",
+		Slug:  "amazonMusic",
 		Title: "Amazon Music",
 	}, {
-		Slug: "pandora",
+		Slug:  "pandora",
 		Title: "Pandora",
 	}, {
-		Slug: "deezer",
+		Slug:  "deezer",
 		Title: "Deezer",
 	}, {
-		Slug: "audiomack",
+		Slug:  "audiomack",
 		Title: "AudioMack",
 	}, {
-		Slug: "qobuz",
+		Slug:  "qobuz",
 		Title: "Qobuz",
 	},
 }
 
 type model struct {
-	Log *os.File
-	OriginalUrl textinput.Model
-	Platform platform
+	Log            *os.File
+	OriginalUrl    textinput.Model
+	Platform       platform
 	PlatformCursor int
-	PlatformUrl string
-	SongwhipData songwhipResponse
-	Spinner spinner.Model
-	State state
+	PlatformUrl    string
+	SongwhipData   songwhipResponse
+	Spinner        spinner.Model
+	State          state
 }
 
 var p *tea.Program
@@ -106,12 +106,12 @@ func main() {
 
 func initialModel() model {
 	return model{
-		Log: openLogFile(),
-		OriginalUrl: makeUrlTextinput(),
+		Log:            openLogFile(),
+		OriginalUrl:    makeUrlTextinput(),
 		PlatformCursor: 0,
-		PlatformUrl: "",
-		Spinner: makeSpinner(),
-		State: GetOriginalUrl,
+		PlatformUrl:    "",
+		Spinner:        makeSpinner(),
+		State:          GetOriginalUrl,
 	}
 }
 
@@ -129,7 +129,7 @@ func makeSpinner() spinner.Model {
 	return s
 }
 
-func openLogFile() (*os.File)  {
+func openLogFile() *os.File {
 	path := "./tmp/whip.log"
 	os.Truncate(path, 0)
 	logFile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -172,19 +172,10 @@ func platformSelectionView(platformCursor int) string {
 	return sb.String()
 }
 
-func getSongwhipData(url string, spin spinner.Model) tea.Cmd {
-	go makeSongwhipRequest(url)
-	return spin.Tick
-}
-
-func makeSongwhipRequest(url string) {
+func getSongwhipData(url string) {
 	var songwhipData songwhipResponse
 	var jsonData = bytes.NewBuffer([]byte(fmt.Sprintf(`{"url": "%s"}`, url)))
 	res, err := http.Post("https://songwhip.com/", "application/json", jsonData)
-
-	if p == nil {
-		os.Exit(1)
-	}
 
 	if err != nil {
 		p.Send(errorMsg{})
@@ -209,31 +200,24 @@ func makeSongwhipRequest(url string) {
 
 }
 
-func crawlSongwhip(url string, platform string, tick tea.Cmd) tea.Cmd {
-	go doSongwhipCrawl(url, platform)
-	return tick
-}
-
-func doSongwhipCrawl(url string, platform string) {
-	if p == nil {
-		os.Exit(1)
-	}
-
+func crawlSongwhip(url string, platform string) {
 	var platformUrl string
 
 	if platform == "songwhip" {
-		p.Send(songwhipCrawlMsg{ url: url })
+		p.Send(songwhipCrawlMsg{url: url})
 	}
 
 	c := colly.NewCollector(colly.AllowedDomains("songwhip.com"))
 	selector := fmt.Sprintf("a[data-testid=\"ServiceButton %s itemLinkButton %sItemLinkButton\"]", platform, platform)
 
-	c.OnHTML(selector, func (e *colly.HTMLElement) {
+	c.OnHTML(selector, func(e *colly.HTMLElement) {
 		platformUrl = e.Attr("href")
 	})
 
 	c.Visit(url)
-	p.Send(songwhipCrawlMsg{ url: platformUrl })
+	p.Send(songwhipCrawlMsg{
+		url: platformUrl,
+	})
 }
 
 func (m model) Init() tea.Cmd {
@@ -265,7 +249,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PlatformCursor--
 			}
 		case tea.KeyDown:
-			if m.State == ChoosePlatform && m.PlatformCursor < len(platforms) - 1 {
+			if m.State == ChoosePlatform && m.PlatformCursor < len(platforms)-1 {
 				m.PlatformCursor++
 			}
 		default:
@@ -277,14 +261,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case songwhipReadyMsg:
 		m.State = FetchingSongwhip
-		return m, getSongwhipData(m.OriginalUrl.Value(), m.Spinner)
+		go getSongwhipData(m.OriginalUrl.Value())
+		return m, m.Spinner.Tick
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 	case songwhipDoneMsg:
 		m.State = CrawlingSongwhip
-		return m, crawlSongwhip(msg.url, m.Platform.Slug, m.Spinner.Tick)
+		go crawlSongwhip(msg.url, m.Platform.Slug)
+		return m, m.Spinner.Tick
 	case songwhipCrawlMsg:
 		clipboard.WriteAll(msg.url)
 		m.PlatformUrl = msg.url
