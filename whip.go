@@ -109,7 +109,6 @@ func initialModel() model {
 		Log:            openLogFile(),
 		OriginalUrl:    makeUrlTextinput(),
 		PlatformCursor: 0,
-		PlatformUrl:    "",
 		Spinner:        makeSpinner(),
 		State:          GetOriginalUrl,
 	}
