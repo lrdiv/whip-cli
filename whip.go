@@ -107,8 +107,13 @@ var p *tea.Program
 
 func main() {
 	model := initialModel()
+	
+	if len(os.Args) > 1 {
+		model.OriginalUrl.SetValue(os.Args[1])
+		model.State = ChoosePlatform
+	}
+	
 	p = tea.NewProgram(model)
-
 	if err := p.Start(); err != nil {
 		fmt.Printf("Oh no! An error! :( %v", err)
 		os.Exit(1)
