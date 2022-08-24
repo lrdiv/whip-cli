@@ -44,6 +44,7 @@ type platform struct {
 	Slug     string
 	Title    string
 	HelpText string
+	Color    lipgloss.Color
 }
 
 var platforms [10]platform = [10]platform{
@@ -51,33 +52,43 @@ var platforms [10]platform = [10]platform{
 		Slug:     "songwhip",
 		Title:    "Songwhip",
 		HelpText: "Get a Songwhip URL with links to all available platforms.",
+		Color:    lipgloss.Color("#E51069"),
 	}, {
 		Slug:  "spotify",
 		Title: "Spotify",
+		Color: lipgloss.Color("#1DB954"),
 	}, {
 		Slug:  "itunes",
 		Title: "Apple Music",
+		Color: lipgloss.Color("#FC3C44"),
 	}, {
 		Slug:  "youtube",
 		Title: "YouTube Music",
+		Color: lipgloss.Color("#FF0000"),
 	}, {
 		Slug:  "tidal",
 		Title: "Tidal",
+		Color: lipgloss.Color("#999999"),
 	}, {
 		Slug:  "amazonMusic",
 		Title: "Amazon Music",
+		Color: lipgloss.Color("#1AD2FB"),
 	}, {
 		Slug:  "pandora",
 		Title: "Pandora",
+		Color: lipgloss.Color("#00A0EE"),
 	}, {
 		Slug:  "deezer",
 		Title: "Deezer",
+		Color: lipgloss.Color("#999999"),
 	}, {
 		Slug:  "audiomack",
 		Title: "AudioMack",
+		Color: lipgloss.Color("#FFA200"),
 	}, {
 		Slug:  "qobuz",
 		Title: "Qobuz",
+		Color: lipgloss.Color("#999999"),
 	},
 }
 
@@ -124,7 +135,6 @@ func makeUrlTextinput() textinput.Model {
 func makeSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
 	return s
 }
 
@@ -157,7 +167,7 @@ func platformSelectionView(platformCursor int) string {
 		cursor := " "
 		if platformCursor == i {
 			cursor = ">"
-			style := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
+			style := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(platform.Color))
 			sb.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, platform.Title)))
 			if platform.HelpText != "" {
 				sb.WriteString(fmt.Sprintf(": %s", platform.HelpText))
@@ -259,6 +269,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case songwhipReadyMsg:
+		m.Spinner.Style = lipgloss.NewStyle().Foreground(m.Platform.Color)
 		m.State = FetchingSongwhip
 		go getSongwhipData(m.OriginalUrl.Value())
 		return m, m.Spinner.Tick
@@ -297,12 +308,13 @@ func (m model) View() string {
 		return fmt.Sprintf("%s Getting %s URL...", m.Spinner.View(), m.Platform.Title)
 	case Done:
 		if len(m.PlatformUrl) == 0 {
-			return fmt.Sprintf("Oh no! Could not find a URL for %s :(", m.Platform.Title)
+			platform := lipgloss.NewStyle().Foreground(m.Platform.Color).SetString(m.Platform.Title)
+			return fmt.Sprintf("Oh no! Could not find a URL for %s :(", platform)
 		} else {
 			return fmt.Sprintf(
 				"Here's your %s URL! The link has been copied to your clipboard.\n\n%s\n\n(press any key to quit)",
-				m.Platform.Title,
-				m.PlatformUrl,
+				lipgloss.NewStyle().Foreground(lipgloss.Color(m.Platform.Color)).SetString(m.Platform.Title),
+				lipgloss.NewStyle().Background(lipgloss.Color(m.Platform.Color)).Bold(true).SetString(m.PlatformUrl),
 			)
 		}
 	}
