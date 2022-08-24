@@ -47,7 +47,7 @@ type platform struct {
 	Color    lipgloss.Color
 }
 
-var platforms [10]platform = [10]platform{
+var platforms [11]platform = [11]platform{
 	{
 		Slug:     "songwhip",
 		Title:    "Songwhip",
@@ -73,6 +73,10 @@ var platforms [10]platform = [10]platform{
 		Slug:  "amazonMusic",
 		Title: "Amazon Music",
 		Color: lipgloss.Color("#1AD2FB"),
+	}, {
+		Slug:  "napster",
+		Title: "Napster",
+		Color: lipgloss.Color("#999999"),
 	}, {
 		Slug:  "pandora",
 		Title: "Pandora",
