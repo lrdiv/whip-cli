@@ -41,6 +41,7 @@ type songwhipCrawlMsg struct {
 }
 
 type platform struct {
+	Selector string
 	Slug     string
 	Title    string
 	HelpText string
@@ -49,50 +50,61 @@ type platform struct {
 
 var platforms [11]platform = [11]platform{
 	{
+		Selector: "songwhip",
 		Slug:     "songwhip",
 		Title:    "Songwhip",
 		HelpText: "Get a Songwhip URL with links to all available platforms.",
 		Color:    lipgloss.Color("#E51069"),
 	}, {
-		Slug:  "spotify",
-		Title: "Spotify",
-		Color: lipgloss.Color("#1DB954"),
+		Selector: "spotify",
+		Slug:     "spotify",
+		Title:    "Spotify",
+		Color:    lipgloss.Color("#1DB954"),
 	}, {
-		Slug:  "itunes",
-		Title: "Apple Music",
-		Color: lipgloss.Color("#FC3C44"),
+		Selector: "itunes",
+		Slug:     "apple",
+		Title:    "Apple Music",
+		Color:    lipgloss.Color("#FC3C44"),
 	}, {
-		Slug:  "youtube",
-		Title: "YouTube Music",
-		Color: lipgloss.Color("#FF0000"),
+		Selector: "youtube",
+		Slug:     "youtube",
+		Title:    "YouTube Music",
+		Color:    lipgloss.Color("#FF0000"),
 	}, {
-		Slug:  "tidal",
-		Title: "Tidal",
-		Color: lipgloss.Color("#999999"),
+		Selector: "tidal",
+		Slug:     "tidal",
+		Title:    "Tidal",
+		Color:    lipgloss.Color("#999999"),
 	}, {
-		Slug:  "amazonMusic",
-		Title: "Amazon Music",
-		Color: lipgloss.Color("#1AD2FB"),
+		Selector: "amazonMusic",
+		Slug:     "amazon",
+		Title:    "Amazon Music",
+		Color:    lipgloss.Color("#1AD2FB"),
 	}, {
-		Slug:  "napster",
-		Title: "Napster",
-		Color: lipgloss.Color("#999999"),
+		Selector: "napster",
+		Slug:     "napster",
+		Title:    "Napster",
+		Color:    lipgloss.Color("#999999"),
 	}, {
-		Slug:  "pandora",
-		Title: "Pandora",
-		Color: lipgloss.Color("#00A0EE"),
+		Selector: "pandora",
+		Slug:     "pandora",
+		Title:    "Pandora",
+		Color:    lipgloss.Color("#00A0EE"),
 	}, {
-		Slug:  "deezer",
-		Title: "Deezer",
-		Color: lipgloss.Color("#999999"),
+		Selector: "deezer",
+		Slug:     "deezer",
+		Title:    "Deezer",
+		Color:    lipgloss.Color("#999999"),
 	}, {
-		Slug:  "audiomack",
-		Title: "AudioMack",
-		Color: lipgloss.Color("#FFA200"),
+		Selector: "audiomack",
+		Slug:     "audiomack",
+		Title:    "AudioMack",
+		Color:    lipgloss.Color("#FFA200"),
 	}, {
-		Slug:  "qobuz",
-		Title: "Qobuz",
-		Color: lipgloss.Color("#999999"),
+		Selector: "qobuz",
+		Slug:     "qobuz",
+		Title:    "Qobuz",
+		Color:    lipgloss.Color("#999999"),
 	},
 }
 
@@ -112,9 +124,19 @@ var p *tea.Program
 func main() {
 	model := initialModel()
 
+	// if the URL arg is present, set it and assume initial state is ChoosePlatform
 	if len(os.Args) > 1 {
 		model.OriginalUrl.SetValue(os.Args[1])
 		model.State = ChoosePlatform
+	}
+	// if a platform arg is also present, set the platform and the state
+	if len(os.Args) == 3 {
+		for _, v := range platforms {
+			if v.Slug == os.Args[2] {
+				model.Platform = v
+				model.State = FetchingSongwhip
+			}
+		}
 	}
 
 	p = tea.NewProgram(model)
@@ -239,7 +261,14 @@ func crawlSongwhip(url string, platform string) {
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	// if no platform arg was specified we can let the update function determine state
+	if len(os.Args) < 3 {
+		return textinput.Blink
+	}
+	// if a platform arg was specified go straight to songwhip fetch
+	return func() tea.Msg {
+		return songwhipReadyMsg{}
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -288,7 +317,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case songwhipDoneMsg:
 		m.State = CrawlingSongwhip
-		go crawlSongwhip(msg.url, m.Platform.Slug)
+		go crawlSongwhip(msg.url, m.Platform.Selector)
 		return m, m.Spinner.Tick
 	case songwhipCrawlMsg:
 		clipboard.WriteAll(msg.url)
